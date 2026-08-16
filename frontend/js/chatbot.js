@@ -9,59 +9,103 @@ async function sendMessage() {
         return;
     }
 
+
     // Display user's message
     const userMessage = document.createElement("div");
 
-    userMessage.classList.add("message", "user-message");
+    userMessage.classList.add(
+        "message",
+        "user-message"
+    );
 
     userMessage.textContent = question;
 
     chatBox.appendChild(userMessage);
 
+
     // Clear input
     input.value = "";
 
+
     try {
 
-        const response = await fetch("http://127.0.0.1:5000/chat", {
+        const response = await fetch(
+            "https://ai-student-support-chatbot-bqka.onrender.com/chat",
+            {
+                method: "POST",
 
-            method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
 
-            headers: {
-                "Content-Type": "application/json"
-            },
+                body: JSON.stringify({
+                    question: question
+                })
+            }
+        );
 
-            body: JSON.stringify({
-                question: question
-            })
 
-        });
+        if (!response.ok) {
+
+            throw new Error(
+                `Server returned ${response.status}`
+            );
+
+        }
+
 
         const data = await response.json();
+
 
         // Display bot response
         const botMessage = document.createElement("div");
 
-        botMessage.classList.add("message", "bot-message");
+        botMessage.classList.add(
+            "message",
+            "bot-message"
+        );
 
-        botMessage.textContent = data.answer;
+        botMessage.textContent =
+            data.answer ||
+            "Sorry, I could not find an answer.";
 
-        chatBox.appendChild(botMessage);
+
+        chatBox.appendChild(
+            botMessage
+        );
+
 
         // Scroll to latest message
-        chatBox.scrollTop = chatBox.scrollHeight;
+        chatBox.scrollTop =
+            chatBox.scrollHeight;
+
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            "Chatbot error:",
+            error
+        );
 
-        const errorMessage = document.createElement("div");
 
-        errorMessage.classList.add("message", "bot-message");
+        const errorMessage =
+            document.createElement("div");
+
+        errorMessage.classList.add(
+            "message",
+            "bot-message"
+        );
 
         errorMessage.textContent =
             "Sorry, I couldn't connect to the server.";
 
-        chatBox.appendChild(errorMessage);
+
+        chatBox.appendChild(
+            errorMessage
+        );
+
+
+        chatBox.scrollTop =
+            chatBox.scrollHeight;
     }
 }
