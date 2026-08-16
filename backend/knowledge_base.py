@@ -3,7 +3,7 @@ import pickle
 import pandas as pd
 
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 # --------------------------------
@@ -11,7 +11,7 @@ from sentence_transformers import SentenceTransformer
 # --------------------------------
 
 BASE_DIR = os.path.dirname(
-    os.path.dirname(__file__)
+    os.path.dirname(os.path.abspath(__file__))
 )
 
 DOCUMENT_FOLDER = os.path.join(
@@ -27,16 +27,9 @@ FAQ_PATH = os.path.join(
 )
 
 OUTPUT_PATH = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     "knowledge_base.pkl"
 )
-
-
-# --------------------------------
-# Embedding model
-# --------------------------------
-
-MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 # --------------------------------
@@ -108,17 +101,14 @@ def load_pdfs():
             if text:
                 full_text += text + "\n"
 
-
         # Split into chunks
 
         words = full_text.split()
 
         chunk_size = 500
-
         overlap = 50
 
         start = 0
-
 
         while start < len(words):
 
@@ -127,7 +117,6 @@ def load_pdfs():
             chunk_text = " ".join(
                 words[start:end]
             )
-
 
             if chunk_text.strip():
 
@@ -139,11 +128,9 @@ def load_pdfs():
 
                 })
 
-
             start += (
                 chunk_size - overlap
             )
-
 
     return chunks
 
@@ -164,7 +151,6 @@ def build_knowledge_base():
         f"FAQ chunks: {len(faq_chunks)}"
     )
 
-
     print(
         "Loading PDF documents..."
     )
@@ -175,48 +161,39 @@ def build_knowledge_base():
         f"PDF chunks: {len(pdf_chunks)}"
     )
 
-
     all_chunks = (
         faq_chunks +
         pdf_chunks
     )
 
-
     return all_chunks
 
 
 # --------------------------------
-# Create embeddings
+# Create TF-IDF vectors
 # --------------------------------
 
 def create_embeddings(chunks):
 
     print(
-        "\nLoading embedding model..."
+        "\nCreating TF-IDF vectors..."
     )
-
-    model = SentenceTransformer(
-        MODEL_NAME
-    )
-
 
     texts = [
         chunk["text"]
         for chunk in chunks
     ]
 
-
-    print(
-        "Creating embeddings..."
+    vectorizer = TfidfVectorizer(
+        lowercase=True,
+        stop_words="english"
     )
 
-    embeddings = model.encode(
-        texts,
-        show_progress_bar=True
+    embeddings = vectorizer.fit_transform(
+        texts
     )
 
-
-    return embeddings
+    return vectorizer, embeddings
 
 
 # --------------------------------
@@ -229,14 +206,11 @@ if __name__ == "__main__":
         "Building knowledge base..."
     )
 
-
     chunks = build_knowledge_base()
-
 
     print(
         f"\nTotal chunks: {len(chunks)}"
     )
-
 
     if len(chunks) == 0:
 
@@ -246,20 +220,19 @@ if __name__ == "__main__":
 
         exit()
 
-
-    embeddings = create_embeddings(
+    vectorizer, embeddings = create_embeddings(
         chunks
     )
-
 
     knowledge_base = {
 
         "chunks": chunks,
 
+        "vectorizer": vectorizer,
+
         "embeddings": embeddings
 
     }
-
 
     with open(
         OUTPUT_PATH,
@@ -270,7 +243,6 @@ if __name__ == "__main__":
             knowledge_base,
             file
         )
-
 
     print(
         "\nKnowledge base created successfully!"

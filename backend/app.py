@@ -4,7 +4,6 @@ from flask_cors import CORS
 import os
 import pickle
 
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
@@ -22,7 +21,7 @@ CORS(app)
 # ========================================
 
 knowledge_base_path = os.path.join(
-    os.path.dirname(__file__),
+    os.path.dirname(os.path.abspath(__file__)),
     "knowledge_base.pkl"
 )
 
@@ -36,41 +35,40 @@ with open(
 
 chunks = knowledge_base["chunks"]
 
+vectorizer = knowledge_base["vectorizer"]
+
 embeddings = knowledge_base["embeddings"]
-
-
-# ========================================
-# LOAD EMBEDDING MODEL
-# ========================================
-
-model = SentenceTransformer(
-    "all-MiniLM-L6-v2"
-)
 
 
 # ========================================
 # HOME ROUTE
 # ========================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
 
-    return "AI Student Support Chatbot is running!"
+    return jsonify({
+        "message": "AI Student Support Chatbot API is running!"
+    })
 
 
 # ========================================
 # CHAT ROUTE
 # ========================================
 
-@app.route(
-    "/chat",
-    methods=["POST"]
-)
+@app.route("/chat", methods=["POST"])
 def chat():
 
     # Get request data
 
     data = request.get_json()
+
+    if not data:
+
+        return jsonify({
+            "answer": "Please provide a question."
+        }), 400
+
 
     question = data.get(
         "question",
@@ -78,28 +76,26 @@ def chat():
     ).strip()
 
 
-    # ====================================
-    # CHECK EMPTY QUESTION
-    # ====================================
+    # Check empty question
 
     if not question:
 
         return jsonify({
-            "error": "Question is required"
+            "answer": "Please enter a question."
         }), 400
 
 
     # ====================================
-    # CREATE QUESTION EMBEDDING
+    # Convert question to TF-IDF vector
     # ====================================
 
-    question_embedding = model.encode(
+    question_embedding = vectorizer.transform(
         [question]
     )
 
 
     # ====================================
-    # CALCULATE SIMILARITY
+    # Calculate similarity
     # ====================================
 
     similarities = cosine_similarity(
@@ -109,7 +105,7 @@ def chat():
 
 
     # ====================================
-    # FIND BEST MATCH
+    # Find best match
     # ====================================
 
     best_match_index = similarities.argmax()
@@ -118,149 +114,62 @@ def chat():
         best_match_index
     ]
 
-    best_chunk = chunks[
-        best_match_index
-    ]
-
 
     # ====================================
-    # DEBUG INFORMATION
-    # ====================================
-
-    print(
-        "\nQuestion:",
-        question
-    )
-
-    print(
-        "Best similarity:",
-        best_score
-    )
-
-    print(
-        "Source:",
-        best_chunk["source"]
-    )
-
-
-    # ====================================
-    # GENERATE ANSWER
+    # Minimum similarity threshold
     # ====================================
 
     if best_score < 0.25:
 
         answer = (
-            "Sorry, I couldn't find reliable "
-            "information about that in the "
-            "student support documents."
+            "Sorry, I could not find a relevant "
+            "answer in the student support knowledge base."
         )
 
-        source = "No reliable source"
-
+        source = "No relevant source"
 
     else:
 
-        answer = best_chunk["text"].strip()
+        best_chunk = chunks[
+            best_match_index
+        ]
 
-        source = best_chunk["source"]
+        text = best_chunk.get(
+            "text",
+            ""
+        )
+
+        source = best_chunk.get(
+            "source",
+            "Knowledge Base"
+        )
 
 
         # =================================
-        # CLEAN FAQ RESPONSE
+        # Extract answer from FAQ format
         # =================================
 
-        if answer.startswith("Question:"):
+        if "Answer:" in text:
 
-            parts = answer.split(
+            answer = text.split(
                 "Answer:",
                 1
-            )
+            )[1].strip()
 
-            if len(parts) == 2:
+        else:
 
-                answer = parts[1].strip()
-
-
-        # =================================
-        # CLEAN COMMON Q/A FORMATS
-        # =================================
-
-        if answer.startswith("Q:"):
-
-            if "A:" in answer:
-
-                parts = answer.split(
-                    "A:",
-                    1
-                )
-
-                if len(parts) == 2:
-
-                    answer = parts[1].strip()
-
-
-        # =================================
-        # REMOVE DUPLICATED QUESTION
-        # =================================
-
-        question_clean = (
-            question
-            .lower()
-            .strip()
-            .rstrip("?")
-        )
-
-        answer_lines = (
-            answer.split("\n")
-        )
-
-        cleaned_lines = []
-
-
-        for line in answer_lines:
-
-            line_clean = (
-                line
-                .strip()
-                .lower()
-                .rstrip("?")
-            )
-
-
-            # Skip a line if it is
-            # basically the user's question
-
-            if line_clean == question_clean:
-
-                continue
-
-
-            cleaned_lines.append(
-                line
-            )
-
-
-        answer = "\n".join(
-            cleaned_lines
-        ).strip()
+            answer = text.strip()
 
 
     # ====================================
-    # RETURN RESPONSE
+    # Return response
     # ====================================
 
     return jsonify({
 
-        "question": question,
-
         "answer": answer,
 
-        "source": source,
-
-        "similarity": round(
-            float(best_score),
-            2
-        )
+        "source": source
 
     })
 
@@ -272,5 +181,7 @@ def chat():
 if __name__ == "__main__":
 
     app.run(
-        debug=True
+        host="0.0.0.0",
+        port=5000,
+        debug=False
     )
